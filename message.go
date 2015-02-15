@@ -60,8 +60,6 @@ func (m *Message) String() string {
 
 func (m *Message) Gelf() string {
 	var buffer bytes.Buffer
-	timeLayout := "2006-01-02 15:04:05"
-        timestampLayout := "01-02 15:04:05"
 	buffer.WriteString(`{"version": "1.1","host":"`)
 	buffer.WriteString(fmt.Sprintf(`%s", "short_message":"%s", `, m.Hostname, m.Content))
 	buffer.WriteString(fmt.Sprintf(`"timestamp":%d, "level":%d, `, m.Time.Unix(), m.Severity))
