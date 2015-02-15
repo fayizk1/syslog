@@ -114,7 +114,7 @@ func (s *Server) receiver(c net.PacketConn) {
 	}
 }
 
-func (s *server) processPkt(pkt []byte, addr net.Addr, n int){
+func (s *Server) processPkt(pkt []byte, addr net.Addr, n int){
 	m := new(Message)
 	m.Source = addr
 	m.Time = time.Now()
