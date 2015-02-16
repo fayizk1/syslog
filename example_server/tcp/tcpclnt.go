@@ -3,8 +3,6 @@ package main
 import (
 	"net"
 	"strconv"
-	"bytes"
-	"fmt"
 )
 
 const TCP_NETWORK = "tcp"
@@ -46,6 +44,7 @@ func MustTcpClient(host string, port uint16) *TcpClient {
 }
 
 func (tcpClient *TcpClient) SendMessageData(message MessageData) error {
+     	messageWithSeparator := append(message, MESSAGE_SEPARATOR...)
 	if _, writeErr := tcpClient.connection.Write(messageWithSeparator); nil != writeErr {
 		return writeErr
 	}

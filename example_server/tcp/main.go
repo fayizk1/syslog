@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/fayizk1/syslog"
-	"github.com/robertkowalski/graylog-golang"
+//	"github.com/robertkowalski/graylog-golang"
 	"code.google.com/p/gcfg"
 	"os"
 	"os/signal"
@@ -41,7 +41,7 @@ type ConfigReader struct {
 	}
 }
 var cfgrd ConfigReader
-var tcpclt TcpClient
+var tcpclt *TcpClient
 
 func init() {
 	err := gcfg.ReadFileInto(&cfgrd, "server.gcfg")
