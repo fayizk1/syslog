@@ -6,6 +6,7 @@ import (
 	"strings"
 	"bytes"
 	"time"
+	"encoding/json"
 )
 
 type Message struct {
@@ -19,6 +20,17 @@ type Message struct {
 	Content   string // message content as defined in RFC 3164
 	Tag1      string // alternate message tag (white rune as separator)
 	Content1  string // alternate message content (white rune as separator)
+}
+
+type Gelf struct {
+	Versionstring `json:"version"`
+        Host  string `json:"host"`
+	ShortMessage  string `json:"short_message"`
+	Timestamp int64`json:"timestamp"`
+	Level int  `json:"level"`
+	Tag string `json:"_tag"`
+	Source string `json:"_source"`
+	LogTypestring `json:"_log_type"`
 }
 
 // NetSrc only network part of Source as string (IP for UDP or Name for UDS)
@@ -58,11 +70,15 @@ func (m *Message) String() string {
 	)
 }
 
-func (m *Message) Gelf() string {
-	var buffer bytes.Buffer
+func (m *Message) Gelf() ([]byte, error) {
+/*	var buffer bytes.Buffer
 	buffer.WriteString(`{"version": "1.1","host":"`)
 	buffer.WriteString(fmt.Sprintf(`%s", "short_message":"%s", `, m.Hostname, m.Content))
 	buffer.WriteString(fmt.Sprintf(`"timestamp":%d, "level":%d, `, m.Time.Unix(), m.Severity))
 	buffer.WriteString(fmt.Sprintf(`"_tag":"%s", "_source" : "%s", "_log_type" : "syslog"}`, m.Tag, m.Source))
-	return buffer.String()
+	return buffer.String()*/
+	gelf := &Gelf{Version : "1.1", Host : m.Hostname, ShortMessage:m.Content, Timestamp:m.Time.Unix(), Level: m.Severity, 
+		Tag: m.Tag, Source: m.Source, LogType: "syslog"}
+	b, err := json.Marshal(gelf)
+	return b, err
 }
