@@ -77,7 +77,7 @@ func (m *Message) Gelf() ([]byte, error) {
 	buffer.WriteString(fmt.Sprintf(`"_tag":"%s", "_source" : "%s", "_log_type" : "syslog"}`, m.Tag, m.Source))
 	return buffer.String()*/
 	gelf := &Gelf{Version : "1.1", Host : m.Hostname, ShortMessage:m.Content, Timestamp:m.Time.Unix(), Level: int(m.Severity), 
-		Tag: m.Tag, Source: m.Source.String(), LogType: "syslog"}
+		Tag: m.Tag, Source: m.NetSrc(), LogType: "syslog"}
 	b, err := json.Marshal(gelf)
 	return b, err
 }
