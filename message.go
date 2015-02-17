@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"bytes"
 	"time"
 	"encoding/json"
 )
@@ -23,14 +22,14 @@ type Message struct {
 }
 
 type Gelf struct {
-	Versionstring `json:"version"`
+	Version string `json:"version"`
         Host  string `json:"host"`
 	ShortMessage  string `json:"short_message"`
 	Timestamp int64`json:"timestamp"`
 	Level int  `json:"level"`
 	Tag string `json:"_tag"`
 	Source string `json:"_source"`
-	LogTypestring `json:"_log_type"`
+	LogType string `json:"_log_type"`
 }
 
 // NetSrc only network part of Source as string (IP for UDP or Name for UDS)
@@ -77,8 +76,8 @@ func (m *Message) Gelf() ([]byte, error) {
 	buffer.WriteString(fmt.Sprintf(`"timestamp":%d, "level":%d, `, m.Time.Unix(), m.Severity))
 	buffer.WriteString(fmt.Sprintf(`"_tag":"%s", "_source" : "%s", "_log_type" : "syslog"}`, m.Tag, m.Source))
 	return buffer.String()*/
-	gelf := &Gelf{Version : "1.1", Host : m.Hostname, ShortMessage:m.Content, Timestamp:m.Time.Unix(), Level: m.Severity, 
-		Tag: m.Tag, Source: m.Source, LogType: "syslog"}
+	gelf := &Gelf{Version : "1.1", Host : m.Hostname, ShortMessage:m.Content, Timestamp:m.Time.Unix(), Level: int(m.Severity), 
+		Tag: m.Tag, Source: m.Source.String(), LogType: "syslog"}
 	b, err := json.Marshal(gelf)
 	return b, err
 }

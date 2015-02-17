@@ -90,9 +90,14 @@ func (h *handler) mainLoop() {
 		if m == nil {
 			break
 		}
-		g.Log(m.Gelf())
+		message, err := m.Gelf()
+		if err != nil {
+		   fmt.Println("Error", err)
+		   continue
+		}
+		g.Log(string(message))
 	//	fmt.Println(m)
-		//fmt.Println(m.Gelf())
+	//	fmt.Println(m.Gelf())
 	}
 	fmt.Println("Exit handler")
 	h.End()

@@ -92,7 +92,12 @@ func (h *handler) mainLoop() {
 		if m == nil {
 			break
 		}
-		tcpclt.SendMessageData([]byte(m.Gelf()))
+		message, err := m.Gelf()
+		if err != nil {
+		   fmt.Println("Error", message)
+		   continue
+		}
+		tcpclt.SendMessageData(message)
 //		g.Log(m.Gelf())
 	//	fmt.Println(m)
 		//fmt.Println(m.Gelf())
