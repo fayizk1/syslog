@@ -69,7 +69,7 @@ func (m *Message) String() string {
 	)
 }
 
-func (m *Message) Gelf() ([]byte, error) {
+func (m *Message) Gelf(callback func([]byte, string,string)([]byte, error)) ([]byte, error) {
 /*	var buffer bytes.Buffer
 	buffer.WriteString(`{"version": "1.1","host":"`)
 	buffer.WriteString(fmt.Sprintf(`%s", "short_message":"%s", `, m.Hostname, m.Content))
@@ -78,6 +78,13 @@ func (m *Message) Gelf() ([]byte, error) {
 	return buffer.String()*/
 	gelf := &Gelf{Version : "1.1", Host : m.Hostname, ShortMessage:m.Content, Timestamp:m.Time.Unix(), Level: int(m.Severity), 
 		Tag: m.Tag, Source: m.NetSrc(), LogType: "syslog"}
-	b, err := json.Marshal(gelf)
-	return b, err
+	baseJ, err := json.Marshal(gelf)
+	if err != nil {
+		return nil, err
+	}
+	parseJ, err := callback(baseJ, m.Tag, m.Content)
+	if err != nil {
+		return baseJ, nil
+	}
+	return parseJ, err
 }

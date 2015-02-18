@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/fayizk1/syslog"
-//	"github.com/robertkowalski/graylog-golang"
-	"code.google.com/p/gcfg"
 	"os"
 	"os/signal"
 	"syscall"
 	"strings"
+	"github.com/fayizk1/syslog"
+	"code.google.com/p/gcfg"
+	"github.com/bennyscetbun/jsongo"
 )
 
 type handler struct {
@@ -21,13 +21,17 @@ type Server struct {
 	Graylogport uint16
 }
 
-var server Server 
-
 type Filter struct {
 	Tag []string
 	Message []string
 }
-var filter Filter
+
+type Rule struct {
+	Keys []string
+	Keywords string
+}
+
+type RuleKeywords map[string]*Rule{}
 
 type ConfigReader struct {
         Server struct {
@@ -39,11 +43,19 @@ type ConfigReader struct {
 		Tag []string
 		Message []string
 	}
+	Parser struct {
+		Rules []string
+	}
 }
-var cfgrd ConfigReader
+
 var tcpclt *TcpClient
+var rulekeywords RuleKeywords
+var filter Filter
+var server Server 
 
 func init() {
+	var cfgrd ConfigReader
+	rulekeywords = make(RuleKeywords)
 	err := gcfg.ReadFileInto(&cfgrd, "server.gcfg")
 	if err == nil {
 		server.Uri = cfgrd.Server.Uri
@@ -60,6 +72,20 @@ func init() {
 	tcpclt = MustTcpClient(server.Grayloghostname, server.Graylogport)
 }
 
+func rulesvalidator() {
+	for i:= range Parser.Rules {
+		temprulestr := strings.Split(Parser.Rules[i], "~~~")
+		if len(temprulestr) == 3{
+			if temprulestr[1] == "" {
+				continue
+			}
+			tempkeys := temprulestr[1].Split(",")
+			temprule := &Rule{Keys:tempkeys, Keywords : temprulestr[2]}
+			rulekeywords[temprulestr[0]] = temprule
+		}
+	}
+}
+
 func filterfn(m *syslog.Message) bool {
 	for i := range filter.Tag {
 		//fmt.Println(filter.Tag[i])
@@ -73,6 +99,28 @@ func filterfn(m *syslog.Message) bool {
 		}
 	}
 	return true
+}
+
+func parserfn(baseJ []byte, tag, content string) ([]byte, error) {
+	rulekeyword, ok := rulekeywords[tag]
+	if !ok {
+		return nil, errors.New("Tag not found.")
+	}
+	Regexp := regexp.MustCompile(rulekeyword.Keywords)
+	result := Regexp.FindStringSubmatch(content)
+	if (len(result) - 1) != len(result) {
+		return nil,  errors.New("No match.")
+	}
+	root := jsongo.JSONNode{}
+	err := json.Unmarshal(baseJ, &root)
+	if err != nil {
+		return nil, err
+	}
+	for i:= range rulekeyword.Keys {
+		root.Map(rulekeyword.Keys[i]).Val(result[i+1])
+	}
+	parseJ, err := json.Marshal(&root)
+	return parseJ, err
 }
 
 func newHandler() *handler {
