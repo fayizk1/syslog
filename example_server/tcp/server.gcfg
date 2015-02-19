@@ -3,5 +3,8 @@ uri = "0.0.0.0:514"
 grayloghostname = "10.0.2.15"
 graylogport = 12201
 [filter]
-tag = "test"
-message = "test"
+tag = "tewwwwst"
+message = "tewwst"
+[parser]
+rules = "test~~~_a,_b~~~.*\\s(\\d+).*\\s(\\d+).*" 
+rules = "fayiz~~~_a~~~.*\\s(\\d+).*"

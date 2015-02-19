@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/signal"
 	"syscall"
 	"strings"
+	"errors"
+	"regexp"
+	"os/signal"
+	"encoding/json"
 	"github.com/fayizk1/syslog"
 	"code.google.com/p/gcfg"
-	"github.com/bennyscetbun/jsongo"
 )
 
 type handler struct {
@@ -31,7 +33,7 @@ type Rule struct {
 	Keywords string
 }
 
-type RuleKeywords map[string]*Rule{}
+type RuleKeywords map[string]Rule
 
 type ConfigReader struct {
         Server struct {
@@ -52,9 +54,9 @@ var tcpclt *TcpClient
 var rulekeywords RuleKeywords
 var filter Filter
 var server Server 
+var cfgrd ConfigReader
 
 func init() {
-	var cfgrd ConfigReader
 	rulekeywords = make(RuleKeywords)
 	err := gcfg.ReadFileInto(&cfgrd, "server.gcfg")
 	if err == nil {
@@ -63,9 +65,9 @@ func init() {
 		server.Graylogport = cfgrd.Server.Graylogport
 		filter.Tag = cfgrd.Filter.Tag
 		filter.Message = cfgrd.Filter.Message
+		rulesvalidator()
 	} else {
 		server = Server{"0.0.0.0:514", "127.0.0.1", 12201}
-//		filter =  Filter{[], []}
 		fmt.Println("Config Error:", err)
 	}
 	fmt.Println(filter.Message, filter.Tag)
@@ -73,22 +75,24 @@ func init() {
 }
 
 func rulesvalidator() {
-	for i:= range Parser.Rules {
-		temprulestr := strings.Split(Parser.Rules[i], "~~~")
+	fmt.Println(cfgrd.Parser.Rules)
+	for i:= range cfgrd.Parser.Rules {
+		fmt.Println(cfgrd.Parser.Rules[i])
+		temprulestr := strings.Split(cfgrd.Parser.Rules[i], "~~~")
 		if len(temprulestr) == 3{
 			if temprulestr[1] == "" {
 				continue
 			}
-			tempkeys := temprulestr[1].Split(",")
-			temprule := &Rule{Keys:tempkeys, Keywords : temprulestr[2]}
+			tempkeys := strings.Split(temprulestr[1], ",")
+			temprule := Rule{Keys:tempkeys, Keywords : temprulestr[2]}
 			rulekeywords[temprulestr[0]] = temprule
 		}
 	}
+	fmt.Println(rulekeywords)
 }
 
 func filterfn(m *syslog.Message) bool {
 	for i := range filter.Tag {
-		//fmt.Println(filter.Tag[i])
 		if m.Tag == filter.Tag[i] {
 			return false
 		}
@@ -108,16 +112,18 @@ func parserfn(baseJ []byte, tag, content string) ([]byte, error) {
 	}
 	Regexp := regexp.MustCompile(rulekeyword.Keywords)
 	result := Regexp.FindStringSubmatch(content)
-	if (len(result) - 1) != len(result) {
-		return nil,  errors.New("No match.")
+	if (len(result) - 1) != len(rulekeyword.Keys) {
+		return nil, errors.New("No match.")
 	}
-	root := jsongo.JSONNode{}
-	err := json.Unmarshal(baseJ, &root)
+	root := make(map[string]interface{})
+	d := json.NewDecoder(strings.NewReader(string(baseJ)))
+	d.UseNumber()
+	err := d.Decode(&root);
 	if err != nil {
 		return nil, err
 	}
 	for i:= range rulekeyword.Keys {
-		root.Map(rulekeyword.Keys[i]).Val(result[i+1])
+		root[rulekeyword.Keys[i]] = result[i+1]
 	}
 	parseJ, err := json.Marshal(&root)
 	return parseJ, err
@@ -140,15 +146,13 @@ func (h *handler) mainLoop() {
 		if m == nil {
 			break
 		}
-		message, err := m.Gelf()
+		message, err := m.Gelf(parserfn)
 		if err != nil {
 		   fmt.Println("Error", message)
 		   continue
 		}
+		fmt.Println(string(message))
 		tcpclt.SendMessageData(message)
-//		g.Log(m.Gelf())
-	//	fmt.Println(m)
-		//fmt.Println(m.Gelf())
 	}
 	fmt.Println("Exit handler")
 	h.End()
