@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 	"syscall"
 	"strings"
 	"errors"
@@ -136,11 +137,6 @@ func newHandler() *handler {
 }
 
 func (h *handler) mainLoop() {
-/*	g := gelf.New(gelf.Config{
-		GraylogPort:     server.Graylogport,
-		GraylogHostname: server.Grayloghostname,
-		Connection:      "wan",
-	})*/
 	for {
 		m := h.Get()
 		if m == nil {
@@ -151,8 +147,13 @@ func (h *handler) mainLoop() {
 		   fmt.Println("Error", message)
 		   continue
 		}
-		fmt.Println(string(message))
-		tcpclt.SendMessageData(message)
+	send:
+		err = tcpclt.SendMessageData(message)
+		if err != nil {
+			fmt.Println("Failed to send message,", err)
+			time.Sleep(200 * time.Millisecond)
+			goto send
+		}
 	}
 	fmt.Println("Exit handler")
 	h.End()
@@ -162,11 +163,9 @@ func main() {
 	s := syslog.NewServer()
 	s.AddHandler(newHandler())
 	s.Listen(server.Uri)
-
 	sc := make(chan os.Signal, 2)
 	signal.Notify(sc, syscall.SIGTERM, syscall.SIGINT)
 	<-sc
-
 	fmt.Println("Shutdown the server...")
 	s.Shutdown()
 	fmt.Println("Server is down")

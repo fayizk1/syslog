@@ -3,6 +3,7 @@ package main
 import (
 	"net"
 	"time"
+	"errors"
 )
 
 type TcpConnMng struct {
@@ -19,14 +20,14 @@ func DialTcpMng(net string, laddr, raddr *net.TCPAddr) (*TcpConnMng, error) {
 		raddr:           raddr,
 	}
 
-	if connErr := tcpConnMng.reconnect(); nil != connErr {
+	if connErr := tcpConnMng.Reconnect(); nil != connErr {
 		return nil, connErr
 	} else {
 		return tcpConnMng, nil
 	}
 }
 
-func (tcpConnMng *TcpConnMng) reconnect() error {
+func (tcpConnMng *TcpConnMng) Reconnect() error {
 	if tcpConnMng.tcpConnection != nil {
 		tcpConnMng.tcpConnection.Close()
 		tcpConnMng.tcpConnection = nil
@@ -47,27 +48,24 @@ func (tcpConnMng *TcpConnMng) reconnect() error {
 	return nil
 }
 
-func (tcpConnMng *TcpConnMng) callWithRetry(action func([]byte) (int, error), data []byte,) (int,error,) {
-	if n, err := action(data); nil == err {
-		return n, err
-	}
-
-	if connErr := tcpConnMng.reconnect(); nil != connErr {
-		return 0, connErr
-	}
-
-	return action(data)
-}
-
 func (tcpConnMng *TcpConnMng) Read(b []byte) (n int, err error) {
-	return tcpConnMng.callWithRetry(tcpConnMng.tcpConnection.Read, b)
+	if tcpConnMng.tcpConnection == nil {
+		return 0, errors.New("Cant read , Disconnected")
+	}
+	return tcpConnMng.tcpConnection.Read(b)
 }
 
 func (tcpConnMng *TcpConnMng) Write(b []byte) (n int, err error) {
-	return tcpConnMng.callWithRetry(tcpConnMng.tcpConnection.Write, b)
+	if tcpConnMng.tcpConnection == nil {
+		return 0, errors.New("Cant Write , Disconnected")
+        }
+	return tcpConnMng.tcpConnection.Write(b)
 }
 
 func (tcpConnMng *TcpConnMng) Close() error {
+	if tcpConnMng.tcpConnection == nil {
+		return nil
+	}
 	return tcpConnMng.tcpConnection.Close()
 }
 
