@@ -45,8 +45,15 @@ func (h *BaseHandler) Handle(m *Message) *Message {
 		return m
 	}
 	// Try queue m
-	h.queue <- m
+	select {
+	case h.queue <- m:
+	default:
+	}
+	if h.ft {
+		return m
+	}
 	return nil
+
 }
 
 // Get returns first message from internal queue. It waits for message if queue
