@@ -1,5 +1,7 @@
 package syslog
 
+import "log"
+
 // Handler handles syslog messages
 type Handler interface {
 	// Handle should return Message (mayby modified) for future processing by
@@ -12,9 +14,10 @@ type Handler interface {
 // implements Handler interface using nonblocking queuing of messages and
 // simple message filtering.
 type BaseHandler struct {
-	queue  chan *Message
+	queue  chan []byte
 	end    chan struct{}
 	filter func(*Message) bool
+	parse  func([]byte, string,string)([]byte, error)
 	ft     bool
 }
 
@@ -22,11 +25,12 @@ type BaseHandler struct {
 // or if it returns true messages are passed to BaseHandler internal queue
 // (of qlen length). If filter returns false or ft is true messages are returned
 // to server for future processing by other handlers.
-func NewBaseHandler(qlen int, filter func(*Message) bool, ft bool) *BaseHandler {
+func NewBaseHandler(qlen int, filter func(*Message) bool,parse func([]byte, string,string)([]byte, error),ft bool) *BaseHandler {
 	return &BaseHandler{
-		queue:  make(chan *Message, qlen),
+		queue:  make(chan []byte, qlen),
 		end:    make(chan struct{}),
 		filter: filter,
+		parse: parse,
 		ft:     ft,
 	}
 }
@@ -44,9 +48,14 @@ func (h *BaseHandler) Handle(m *Message) *Message {
 		// m doesn't match the filter
 		return m
 	}
+	message,err := m.Gelf(h.parse)
+	if err != nil {
+		log.Println("Parse error,", err)
+		return m
+	}
 	// Try queue m
 	select {
-	case h.queue <- m:
+	case h.queue <- message:
 	default:
 	}
 	if h.ft {
@@ -59,7 +68,7 @@ func (h *BaseHandler) Handle(m *Message) *Message {
 // Get returns first message from internal queue. It waits for message if queue
 // is empty. It returns nil if there is no more messages to process and handler
 // should shutdown.
-func (h *BaseHandler) Get() *Message {
+func (h *BaseHandler) Get() []byte {
 	m, ok := <-h.queue
 	if ok {
 		return m
@@ -71,7 +80,7 @@ func (h *BaseHandler) Get() *Message {
 // it directly, especially if your handler need to select from multiple channels
 // or have to work without blocking. You need to check if this channel is closed by
 // sender and properly shutdown in this case.
-func (h *BaseHandler) Queue() <-chan *Message {
+func (h *BaseHandler) Queue() <-chan []byte {
 	return h.queue
 }
 

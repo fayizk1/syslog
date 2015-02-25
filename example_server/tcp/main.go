@@ -131,24 +131,26 @@ func parserfn(baseJ []byte, tag, content string) ([]byte, error) {
 }
 
 func newHandler() *handler {
-	h := handler{syslog.NewBaseHandler(512, filterfn, false)}
+	h := handler{syslog.NewBaseHandler(512, filterfn, parserfn,false)}
 	go h.mainLoop() 
 	return &h
 }
 
 func (h *handler) mainLoop() {
 	for {
-		m := h.Get()
-		if m == nil {
+		message := h.Get()
+		if message == nil {
 			break
 		}
+/*
 		message, err := m.Gelf(parserfn)
 		if err != nil {
 		   fmt.Println("Error", message)
 		   continue
 		}
+*/
 	send:
-		err = tcpclt.SendMessageData(message)
+		err := tcpclt.SendMessageData(message)
 		if err != nil {
 			fmt.Println("Failed to send message,", err)
 			time.Sleep(200 * time.Millisecond)
