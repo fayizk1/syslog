@@ -4,6 +4,8 @@ import (
 	"log"
 	"sync"
 	"time"
+	"fmt"
+	"errors"
 	"math/rand"
 	"io/ioutil"
 	"net/http"
@@ -52,8 +54,9 @@ func ReadClusterStatus(uri, userid, password string) (string, string, error){
 	if err != nil {
 		return "", "", err
         }
+	log.Println("2>>>>>", resp.StatusCode)
 	if resp.StatusCode != 200 {
-		return "", "", err
+		return "", "", errors.New(fmt.Sprintf("Error: Returned status code, %d", resp.StatusCode))
 	}
 	content, err := ioutil.ReadAll(resp.Body)
         if err != nil {
@@ -74,7 +77,7 @@ func ReadClusterStatus(uri, userid, password string) (string, string, error){
 		return "", "", err
         }
 	if resp.StatusCode != 200 {
-		return "", "", err
+		return "", "", errors.New(fmt.Sprintf("Error: Returned status code, %d", resp.StatusCode))
         }
 	content, err = ioutil.ReadAll(resp.Body)
         if err != nil {
@@ -92,7 +95,7 @@ func ReadClusterStatus(uri, userid, password string) (string, string, error){
 	return index, serverid, nil
 }
 
-func NewBaseHandler(qlen int, filter func(*Message) bool,parse func([]byte, string,string)([]byte, error), graylog2_username, graylog2_password, graylog2_uri string,ft bool) *BaseHandler {
+func NewBaseHandler(qlen int, filter func(*Message) bool,parse func([]byte, string,string)([]byte, error), graylog2_username, graylog2_password, graylog2_uri string,ft bool) *BaseHandler {	
 	index, nodeid, err := ReadClusterStatus(graylog2_uri, graylog2_username, graylog2_password)
 	if err != nil {
 		panic(err)
@@ -107,7 +110,7 @@ func NewBaseHandler(qlen int, filter func(*Message) bool,parse func([]byte, stri
 		graylog2NodeId : nodeid,
 		graylog2Index : index,
 		graylog2_username : graylog2_username,
-		graylog2_password : graylog2_username,
+		graylog2_password : graylog2_password,
 		graylog2_uri : graylog2_uri,
 	}
 }
@@ -155,6 +158,7 @@ func (h *BaseHandler) ValueUpdater(interval int) {
 		time.Sleep(time.Duration(interval) * time.Second)
 		go func() {
 			index, nodeid, err := ReadClusterStatus(h.graylog2_uri, h.graylog2_username, h.graylog2_password)
+			log.Println("updater", index, nodeid, err)
 			if err != nil {
 				return
 			}

@@ -83,6 +83,7 @@ func (m *Message) String() string {
 }
 
 func (m *Message) Gelf(current_index , id, gl2_source_input, gl2_source_node string, callback func([]byte, string,string)([]byte, error)) ([]byte, error) {
+	fmt.Println("myv:", current_index ,"===" ,gl2_source_node)
 	request := &OperationHeader{Index:index{Index:current_index, Type: "message", Id:id}}
 	gelf := &Gelf{Version : "1.1", Host : m.Hostname, ShortMessage:m.Content, Timestamp:m.Time.Unix(), Level: int(m.Severity), 
 		Tag: m.Tag, Source: m.NetSrc(), LogType: "syslog", Id:id, Gl2SourceInput:gl2_source_input, Gl2SourceNode:gl2_source_node}
@@ -104,5 +105,6 @@ func (m *Message) Gelf(current_index , id, gl2_source_input, gl2_source_node str
 	val := append(requestJ, []byte("\n")...) 
 	val = append(val, parseJ...)
 	val = append(val, []byte("\n")...)
+	fmt.Println(string(val))
 	return val, nil
 }
