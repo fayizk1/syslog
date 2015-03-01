@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 	"time"
 	"syscall"
@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"os/signal"
 	"encoding/json"
+	"github.com/fayizk1/gen-go/elasticsearch"
 	"github.com/fayizk1/syslog"
 	"code.google.com/p/gcfg"
 )
@@ -21,7 +22,7 @@ type handler struct {
 type Server struct {
 	Uri string
 	Grayloghostname string
-	Graylogport uint16
+	Graylogport string
 }
 
 type Filter struct {
@@ -40,7 +41,7 @@ type ConfigReader struct {
         Server struct {
                 Uri string
 		Grayloghostname string
-		Graylogport uint16
+		Graylogport string
         }
 	Filter struct {
 		Tag []string
@@ -51,7 +52,9 @@ type ConfigReader struct {
 	}
 }
 
-var tcpclt *TcpClient
+
+//var tcpclt *TcpClient
+var thriftclt *thriftClient
 var rulekeywords RuleKeywords
 var filter Filter
 var server Server 
@@ -68,17 +71,21 @@ func init() {
 		filter.Message = cfgrd.Filter.Message
 		rulesvalidator()
 	} else {
-		server = Server{"0.0.0.0:514", "127.0.0.1", 12201}
-		fmt.Println("Config Error:", err)
+		server = Server{"0.0.0.0:514", "127.0.0.1", "12201"}
+		log.Println("Config Error:", err)
 	}
-	fmt.Println(filter.Message, filter.Tag)
-	tcpclt = MustTcpClient(server.Grayloghostname, server.Graylogport)
+	log.Println(filter.Message, filter.Tag)
+	thriftclt, err = NewThriftClient(server.Grayloghostname, server.Graylogport)
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 func rulesvalidator() {
-	fmt.Println(cfgrd.Parser.Rules)
+	log.Println(cfgrd.Parser.Rules)
 	for i:= range cfgrd.Parser.Rules {
-		fmt.Println(cfgrd.Parser.Rules[i])
+		log.Println(cfgrd.Parser.Rules[i])
 		temprulestr := strings.Split(cfgrd.Parser.Rules[i], "~~~")
 		if len(temprulestr) == 3{
 			if temprulestr[1] == "" {
@@ -89,7 +96,7 @@ func rulesvalidator() {
 			rulekeywords[temprulestr[0]] = temprule
 		}
 	}
-	fmt.Println(rulekeywords)
+	log.Println(rulekeywords)
 }
 
 func filterfn(m *syslog.Message) bool {
@@ -131,33 +138,42 @@ func parserfn(baseJ []byte, tag, content string) ([]byte, error) {
 }
 
 func newHandler() *handler {
-	h := handler{syslog.NewBaseHandler(512, filterfn, parserfn,false)}
+	h := handler{syslog.NewBaseHandler(512, filterfn, parserfn, "admin", "yourpassword", "10.0.2.15:12900",false)}
+	go h.ValueUpdater(1)
 	go h.mainLoop() 
 	return &h
 }
 
 func (h *handler) mainLoop() {
+	end := false
+	var request = elasticsearch.RestRequest{
+		Method: elasticsearch.Method_POST,
+		Uri:    "/_bulk",
+	}
 	for {
-		message := h.Get()
-		if message == nil {
-			break
+		var message []byte
+		for i := 0;i<100; i++ { 
+			tempmessage := h.Get()
+			if tempmessage == nil {
+				end = true
+				break
+			}
+			message = append(message, tempmessage...)
 		}
-/*
-		message, err := m.Gelf(parserfn)
-		if err != nil {
-		   fmt.Println("Error", message)
-		   continue
-		}
-*/
+		request.Body = message
 	send:
-		err := tcpclt.SendMessageData(message)
+		err := thriftclt.SendData(request)
 		if err != nil {
-			fmt.Println("Failed to send message,", err)
-			time.Sleep(200 * time.Millisecond)
+			log.Println("Failed to send message,", err)
+			time.Sleep(100 * time.Millisecond)
+			log.Println("sending data gain")
 			goto send
 		}
+		if end {
+			break
+		}
 	}
-	fmt.Println("Exit handler")
+	log.Println("Exit handler")
 	h.End()
 }
 
@@ -168,7 +184,7 @@ func main() {
 	sc := make(chan os.Signal, 2)
 	signal.Notify(sc, syscall.SIGTERM, syscall.SIGINT)
 	<-sc
-	fmt.Println("Shutdown the server...")
+	log.Println("Shutdown the server...")
 	s.Shutdown()
-	fmt.Println("Server is down")
+	log.Println("Server is down")
 }

@@ -21,6 +21,16 @@ type Message struct {
 	Content1  string // alternate message content (white rune as separator)
 }
 
+type index struct {
+	Index string `json:"_index"`
+	Type string `json:"_type"`
+	Id string `json:"_id"`
+} 
+
+type OperationHeader struct {
+	Index index `json:"index"`
+}
+
 type Gelf struct {
 	Version string `json:"version"`
         Host  string `json:"host"`
@@ -30,6 +40,9 @@ type Gelf struct {
 	Tag string `json:"_tag"`
 	Source string `json:"_source"`
 	LogType string `json:"_log_type"`
+	Id string `json:"_id"`
+	Gl2SourceInput string `json:"gl2_source_input"`
+	Gl2SourceNode string `json:"gl2_source_node"`
 }
 
 // NetSrc only network part of Source as string (IP for UDP or Name for UDS)
@@ -69,22 +82,27 @@ func (m *Message) String() string {
 	)
 }
 
-func (m *Message) Gelf(callback func([]byte, string,string)([]byte, error)) ([]byte, error) {
-/*	var buffer bytes.Buffer
-	buffer.WriteString(`{"version": "1.1","host":"`)
-	buffer.WriteString(fmt.Sprintf(`%s", "short_message":"%s", `, m.Hostname, m.Content))
-	buffer.WriteString(fmt.Sprintf(`"timestamp":%d, "level":%d, `, m.Time.Unix(), m.Severity))
-	buffer.WriteString(fmt.Sprintf(`"_tag":"%s", "_source" : "%s", "_log_type" : "syslog"}`, m.Tag, m.Source))
-	return buffer.String()*/
+func (m *Message) Gelf(current_index , id, gl2_source_input, gl2_source_node string, callback func([]byte, string,string)([]byte, error)) ([]byte, error) {
+	request := &OperationHeader{Index:index{Index:current_index, Type: "message", Id:id}}
 	gelf := &Gelf{Version : "1.1", Host : m.Hostname, ShortMessage:m.Content, Timestamp:m.Time.Unix(), Level: int(m.Severity), 
-		Tag: m.Tag, Source: m.NetSrc(), LogType: "syslog"}
+		Tag: m.Tag, Source: m.NetSrc(), LogType: "syslog", Id:id, Gl2SourceInput:gl2_source_input, Gl2SourceNode:gl2_source_node}
+	requestJ, err := json.Marshal(request)
+	if err != nil {
+                return nil, err
+        }
 	baseJ, err := json.Marshal(gelf)
 	if err != nil {
 		return nil, err
 	}
 	parseJ, err := callback(baseJ, m.Tag, m.Content)
 	if err != nil {
-		return baseJ, nil
+		val := append(requestJ, []byte("\n")...)
+		val = append(val, baseJ...)
+		val = append(val, []byte("\n")...)
+		return val, nil
 	}
-	return parseJ, err
+	val := append(requestJ, []byte("\n")...) 
+	val = append(val, parseJ...)
+	val = append(val, []byte("\n")...)
+	return val, nil
 }

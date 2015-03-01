@@ -1,43 +1,118 @@
 package syslog
 
-import "log"
+import (
+	"log"
+	"sync"
+	"time"
+	"math/rand"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"encoding/json"
+)
 
-// Handler handles syslog messages
 type Handler interface {
-	// Handle should return Message (mayby modified) for future processing by
-	// other handlers or return nil. If Handle is called with nil message it
-	// should complete all remaining work and properly shutdown before return.
 	Handle(*Message) *Message
 }
 
-// BaseHandler is desigend for simplify the creation of real handlers. It
-// implements Handler interface using nonblocking queuing of messages and
-// simple message filtering.
 type BaseHandler struct {
+	sync.RWMutex
 	queue  chan []byte
 	end    chan struct{}
 	filter func(*Message) bool
 	parse  func([]byte, string,string)([]byte, error)
 	ft     bool
+	inputId string
+	graylog2NodeId string
+	graylog2Index string
+	graylog2_username string
+	graylog2_password string
+	graylog2_uri string
 }
 
-// NewBaseHandler creates BaseHandler using specified filter. If filter is nil
-// or if it returns true messages are passed to BaseHandler internal queue
-// (of qlen length). If filter returns false or ft is true messages are returned
-// to server for future processing by other handlers.
-func NewBaseHandler(qlen int, filter func(*Message) bool,parse func([]byte, string,string)([]byte, error),ft bool) *BaseHandler {
+func randSeq(n int) string {
+	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890-")
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
+
+
+func ReadClusterStatus(uri, userid, password string) (string, string, error){
+	var res_json1, res_json2 map[string]interface{}
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "http://" + uri +"/system/deflector", nil)
+	if err != nil {
+		return "", "", err
+        }
+	req.SetBasicAuth(userid, password)
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+        }
+	if resp.StatusCode != 200 {
+		return "", "", err
+	}
+	content, err := ioutil.ReadAll(resp.Body)
+        if err != nil {
+		return "", "", err
+        }
+	resp.Body.Close()
+	err = json.Unmarshal(content, &res_json1)
+	if err != nil {
+		return "", "", err
+	}
+	index, ok := res_json1["current_target"].(string)
+	if !ok {
+		return "", "", err
+	}
+	req.URL, _ = url.Parse("http://" + uri +"/system")
+	resp, err = client.Do(req)
+	if err != nil {
+		return "", "", err
+        }
+	if resp.StatusCode != 200 {
+		return "", "", err
+        }
+	content, err = ioutil.ReadAll(resp.Body)
+        if err != nil {
+		return "", "", err
+        }
+        resp.Body.Close()
+	err = json.Unmarshal(content, &res_json2)
+	if err != nil {
+		return "", "", err
+        }
+	serverid, ok := res_json2["server_id"].(string)
+	if !ok {
+                return "", "", err
+	}
+	return index, serverid, nil
+}
+
+func NewBaseHandler(qlen int, filter func(*Message) bool,parse func([]byte, string,string)([]byte, error), graylog2_username, graylog2_password, graylog2_uri string,ft bool) *BaseHandler {
+	index, nodeid, err := ReadClusterStatus(graylog2_uri, graylog2_username, graylog2_password)
+	if err != nil {
+		panic(err)
+	}
 	return &BaseHandler{
 		queue:  make(chan []byte, qlen),
 		end:    make(chan struct{}),
 		filter: filter,
 		parse: parse,
 		ft:     ft,
+		inputId : randSeq(10),
+		graylog2NodeId : nodeid,
+		graylog2Index : index,
+		graylog2_username : graylog2_username,
+		graylog2_password : graylog2_username,
+		graylog2_uri : graylog2_uri,
 	}
 }
 
-// Handle inserts m in an internal queue. It immediately returns even if
-// queue is full. If m == nil it closes queue and waits for End method call
-// before return.
+
 func (h *BaseHandler) Handle(m *Message) *Message {
 	if m == nil {
 		close(h.queue) // signal that ther is no more messages for processing
@@ -48,7 +123,9 @@ func (h *BaseHandler) Handle(m *Message) *Message {
 		// m doesn't match the filter
 		return m
 	}
-	message,err := m.Gelf(h.parse)
+	h.RLock()
+	message,err := m.Gelf(h.graylog2Index,randSeq(32), h.inputId, h.graylog2NodeId, h.parse)
+	h.RUnlock()
 	if err != nil {
 		log.Println("Parse error,", err)
 		return m
@@ -65,9 +142,6 @@ func (h *BaseHandler) Handle(m *Message) *Message {
 
 }
 
-// Get returns first message from internal queue. It waits for message if queue
-// is empty. It returns nil if there is no more messages to process and handler
-// should shutdown.
 func (h *BaseHandler) Get() []byte {
 	m, ok := <-h.queue
 	if ok {
@@ -76,16 +150,27 @@ func (h *BaseHandler) Get() []byte {
 	return nil
 }
 
-// Queue returns BaseHandler internal queue as read-only channel. You can use
-// it directly, especially if your handler need to select from multiple channels
-// or have to work without blocking. You need to check if this channel is closed by
-// sender and properly shutdown in this case.
+func (h *BaseHandler) ValueUpdater(interval int) {
+	for {
+		time.Sleep(time.Duration(interval) * time.Second)
+		go func() {
+			index, nodeid, err := ReadClusterStatus(h.graylog2_uri, h.graylog2_username, h.graylog2_password)
+			if err != nil {
+				return
+			}
+			h.Lock()
+			defer h.Unlock()
+			h.graylog2NodeId = nodeid
+			h.graylog2Index = index
+		}()
+	}
+}
+
 func (h *BaseHandler) Queue() <-chan []byte {
 	return h.queue
 }
 
-// End signals the server that handler properly shutdown. You need to call End
-// only if Get has returned nil before.
 func (h *BaseHandler) End() {
 	close(h.end)
 }
+
