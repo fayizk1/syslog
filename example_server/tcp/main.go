@@ -197,7 +197,9 @@ func main() {
 	s.AddHandler(newHandler())
 	log.Println("Reached---232")
 	err := s.Listen(server.Uri)
-	log.Println(err)
+	if err != nil {
+		panic(err)
+	}
 	sc := make(chan os.Signal, 2)
 	signal.Notify(sc, syscall.SIGTERM, syscall.SIGINT)
 	<-sc

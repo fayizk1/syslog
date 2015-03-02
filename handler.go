@@ -6,6 +6,7 @@ import (
 	"time"
 	"fmt"
 	"errors"
+	"strconv"
 	"math/rand"
 	"io/ioutil"
 	"net/http"
@@ -41,7 +42,7 @@ func randSeq(n int) string {
 	for i := range b {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
-	return string(b)
+	return strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + string(b)
 }
 
 func CreateLedisDBHn(configPath string) (*ledis.DB, error) {
