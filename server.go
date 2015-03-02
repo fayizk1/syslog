@@ -117,7 +117,7 @@ func (s *Server) receiver(c net.PacketConn) {
 func (s *Server) processPkt(pkt []byte, addr net.Addr, n int){
 	m := new(Message)
 	m.Source = addr
-	m.Time = time.Now()
+	m.Time = time.Now().UTC()
 	
 	// Parse priority (if exists)
 	prio := 13 // default priority

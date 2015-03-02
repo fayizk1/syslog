@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 )
 
+const layout = "2006-01-02 15:04:05.000"
+
 type Message struct {
 	Time   time.Time
 	Source net.Addr
@@ -34,12 +36,12 @@ type OperationHeader struct {
 type Gelf struct {
 	Version string `json:"version"`
         Host  string `json:"host"`
-	ShortMessage  string `json:"short_message"`
-	Timestamp int64`json:"timestamp"`
+	Message  string `json:"message"`
+	Timestamp string`json:"timestamp"`
 	Level int  `json:"level"`
-	Tag string `json:"_tag"`
-	Source string `json:"_source"`
-	LogType string `json:"_log_type"`
+	Tag string `json:"tag"`
+	Source string `json:"source"`
+	LogType string `json:"log_type"`
 	Id string `json:"_id"`
 	Gl2SourceInput string `json:"gl2_source_input"`
 	Gl2SourceNode string `json:"gl2_source_node"`
@@ -83,9 +85,8 @@ func (m *Message) String() string {
 }
 
 func (m *Message) Gelf(current_index , id, gl2_source_input, gl2_source_node string, callback func([]byte, string,string)([]byte, error)) ([]byte, error) {
-	fmt.Println("myv:", current_index ,"===" ,gl2_source_node)
 	request := &OperationHeader{Index:index{Index:current_index, Type: "message", Id:id}}
-	gelf := &Gelf{Version : "1.1", Host : m.Hostname, ShortMessage:m.Content, Timestamp:m.Time.Unix(), Level: int(m.Severity), 
+	gelf := &Gelf{Version : "1.1", Host : m.Hostname, Message:m.Content, Timestamp:m.Time.Format(layout), Level: int(m.Severity), 
 		Tag: m.Tag, Source: m.NetSrc(), LogType: "syslog", Id:id, Gl2SourceInput:gl2_source_input, Gl2SourceNode:gl2_source_node}
 	requestJ, err := json.Marshal(request)
 	if err != nil {
@@ -105,6 +106,5 @@ func (m *Message) Gelf(current_index , id, gl2_source_input, gl2_source_node str
 	val := append(requestJ, []byte("\n")...) 
 	val = append(val, parseJ...)
 	val = append(val, []byte("\n")...)
-	fmt.Println(string(val))
 	return val, nil
 }

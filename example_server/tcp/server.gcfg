@@ -1,10 +1,18 @@
 [server]
 uri = "0.0.0.0:514"
 grayloghostname = "10.0.2.15"
-graylogport = "9500"
+graylogport = "12900"
+graylogusername = "admin"
+graylogpassword = "yourpassword"
+elasticsearchhostname = "127.0.0.1"
+elasticsearchport = "9500"
+ledisconfig = "/home/vagrant/nn.conf" 
 [filter]
 tag = "tewwwwst"
 message = "tewwst"
 [parser]
 rules = "test~~~_a,_b~~~.*\\s(\\d+).*\\s(\\d+).*" 
 rules = "fayiz~~~_a~~~.*\\s(\\d+).*"
+
+
+

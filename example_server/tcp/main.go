@@ -23,6 +23,11 @@ type Server struct {
 	Uri string
 	Grayloghostname string
 	Graylogport string
+	Graylogusername string
+	Graylogpassword string
+	Elasticsearchhostname  string
+	Elasticsearchport    string
+	Ledisconfig  string
 }
 
 type Filter struct {
@@ -42,6 +47,11 @@ type ConfigReader struct {
                 Uri string
 		Grayloghostname string
 		Graylogport string
+		Graylogusername string
+		Graylogpassword string
+		Elasticsearchhostname  string
+		Elasticsearchport    string
+		Ledisconfig  string
         }
 	Filter struct {
 		Tag []string
@@ -69,17 +79,21 @@ func init() {
 		server.Graylogport = cfgrd.Server.Graylogport
 		filter.Tag = cfgrd.Filter.Tag
 		filter.Message = cfgrd.Filter.Message
+		server.Graylogusername = cfgrd.Server.Graylogusername 
+		server.Graylogpassword = cfgrd.Server.Graylogpassword
+		server.Elasticsearchhostname = cfgrd.Server.Elasticsearchhostname
+		server.Elasticsearchport = cfgrd.Server.Elasticsearchport
+		server.Ledisconfig = cfgrd.Server.Ledisconfig
 		rulesvalidator()
 	} else {
-		server = Server{"0.0.0.0:514", "127.0.0.1", "12201"}
+		server = Server{"0.0.0.0:514", "127.0.0.1", "12900", "admin", "yourpassword", "127.0.0.1", "9200", "/home/vagrant/nn.conf"}
 		log.Println("Config Error:", err)
 	}
 	log.Println(filter.Message, filter.Tag)
-	thriftclt, err = NewThriftClient(server.Grayloghostname, server.Graylogport)
+	thriftclt, err = NewThriftClient(server.Elasticsearchhostname, server.Elasticsearchport)
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 func rulesvalidator() {
@@ -138,9 +152,10 @@ func parserfn(baseJ []byte, tag, content string) ([]byte, error) {
 }
 
 func newHandler() *handler {
-	h := handler{syslog.NewBaseHandler(512, filterfn, parserfn, "admin", "yourpassword", "10.0.2.15:12900",false)}
-	go h.ValueUpdater(1)
-	go h.mainLoop() 
+	h := handler{syslog.NewBaseHandler(512, filterfn, parserfn, server.Graylogusername, server.Graylogpassword,server.Grayloghostname+":"+server.Graylogport ,server.Ledisconfig )}
+	go h.ValueUpdater(4)
+	go h.BacklogQueueMgr()
+	go h.mainLoop()
 	return &h
 }
 
@@ -180,7 +195,9 @@ func (h *handler) mainLoop() {
 func main() {
 	s := syslog.NewServer()
 	s.AddHandler(newHandler())
-	s.Listen(server.Uri)
+	log.Println("Reached---232")
+	err := s.Listen(server.Uri)
+	log.Println(err)
 	sc := make(chan os.Signal, 2)
 	signal.Notify(sc, syscall.SIGTERM, syscall.SIGINT)
 	<-sc
